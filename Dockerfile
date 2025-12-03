@@ -6,31 +6,43 @@ RUN npm install
 COPY . .
 RUN npm run build
 
-# Stage 2 - Backend (Laravel + PHP + Composer)
+
+# Stage 2 - PHP Backend
 FROM php:8.4-fpm AS backend
 
-# Install system dependencies
 RUN apt-get update && apt-get install -y \
-    git curl unzip libpq-dev libonig-dev libzip-dev zip \
+    git curl unzip libpq-dev libonig-dev libzip-dev zip nginx \
     && docker-php-ext-install pdo pdo_mysql mbstring zip
 
-# Install Composer
 COPY --from=composer:2 /usr/bin/composer /usr/bin/composer
 
 WORKDIR /var/www
-
-# Copy app files
 COPY . .
-
-# Copy built frontend from Stage 1
 COPY --from=frontend /app/public/build ./public/build
 
-# Install PHP dependencies
 RUN composer install --no-dev --optimize-autoloader
 
-# Laravel setup
+# Clear caches
 RUN php artisan config:clear && \
     php artisan route:clear && \
     php artisan view:clear
 
-CMD ["php-fpm"]
+
+# Stage 3 - Runtime (Nginx + PHP-FPM)
+FROM php:8.4-fpm
+
+# Install Nginx
+RUN apt-get update && apt-get install -y nginx \
+    && rm /etc/nginx/sites-enabled/default
+
+# Copy App + PHP-FPM from backend
+COPY --from=backend /var/www /var/www
+
+# Copy Nginx config
+COPY nginx.conf /etc/nginx/conf.d/default.conf
+
+WORKDIR /var/www
+
+EXPOSE 80
+
+CMD service nginx start && php-fpm
