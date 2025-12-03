@@ -1,4 +1,3 @@
-# Stage 1 - Build Frontend (Vite)
 FROM node:18 AS frontend
 WORKDIR /app
 COPY package*.json ./
@@ -7,7 +6,6 @@ COPY . .
 RUN npm run build
 
 
-# Stage 2 - PHP Backend
 FROM php:8.4-fpm AS backend
 
 RUN apt-get update && apt-get install -y \
@@ -22,23 +20,20 @@ COPY --from=frontend /app/public/build ./public/build
 
 RUN composer install --no-dev --optimize-autoloader
 
-# Clear caches
+RUN chown -R www-data:www-data /var/www/storage /var/www/bootstrap/cache \
+    && chmod -R 775 /var/www/storage /var/www/bootstrap/cache
+
 RUN php artisan config:clear && \
     php artisan route:clear && \
     php artisan view:clear
 
 
-# Stage 3 - Runtime (Nginx + PHP-FPM)
 FROM php:8.4-fpm
 
-# Install Nginx
 RUN apt-get update && apt-get install -y nginx \
     && rm /etc/nginx/sites-enabled/default
 
-# Copy App + PHP-FPM from backend
 COPY --from=backend /var/www /var/www
-
-# Copy Nginx config
 COPY nginx.conf /etc/nginx/conf.d/default.conf
 
 WORKDIR /var/www
