@@ -63,4 +63,6 @@ COPY nginx.conf /etc/nginx/conf.d/default.conf
 WORKDIR /var/www
 EXPOSE 80
 
+RUN php artisan migrate --force || true
+
 CMD service nginx start && php-fpm
