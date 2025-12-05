@@ -16,6 +16,7 @@ RUN npm run build
 # ============================
 FROM php:8.4-fpm AS backend
 
+# Install build dependencies + PostgreSQL + SQLite + Composer
 RUN apt-get update && apt-get install -y \
     git curl unzip libpq-dev libonig-dev libzip-dev zip \
     libsqlite3-dev sqlite3 nginx \
@@ -27,16 +28,18 @@ COPY --from=composer:2 /usr/bin/composer /usr/bin/composer
 WORKDIR /var/www
 COPY . .
 
+# Copy frontend build
 COPY --from=frontend /app/public/build ./public/build
 
+# Install PHP packages
 RUN composer install --no-dev --optimize-autoloader
 
-RUN chown -R www-data:www-data /var/www/storage /var/www/bootstrap/cache /var/www/database \
+# Fix permissions
+RUN chown -R www-data:www-data /var/www/storage /var/www/bootstrap/cache \
     && chmod -R 775 /var/www/storage /var/www/bootstrap/cache
 
-RUN php artisan config:clear \
-    && php artisan route:clear \
-    && php artisan view:clear
+# Clear caches
+RUN php artisan config:clear && php artisan route:clear && php artisan view:clear
 
 
 # ============================
@@ -44,21 +47,28 @@ RUN php artisan config:clear \
 # ============================
 FROM php:8.4-fpm
 
-# Cài pdo_pgsql trong FINAL IMAGE
+# Install nginx + supervisor + PostgreSQL driver
 RUN apt-get update && apt-get install -y \
-    nginx libpq-dev \
+    nginx supervisor libpq-dev \
     && docker-php-ext-install pdo pdo_pgsql \
     && rm /etc/nginx/sites-enabled/default
 
+# Copy application
 COPY --from=backend /var/www /var/www
+
+# Copy Nginx config
 COPY nginx.conf /etc/nginx/conf.d/default.conf
+
+# Copy Supervisor config
+COPY supervisord.conf /etc/supervisor/conf.d/supervisord.conf
 
 WORKDIR /var/www
 
-# Fix permission để ghi log
+# Fix log + cache permission (prevent 500 error)
 RUN chown -R www-data:www-data /var/www/storage /var/www/bootstrap/cache /var/www/public \
     && chmod -R 775 /var/www/storage /var/www/bootstrap/cache
 
 EXPOSE 80
 
-CMD service nginx start && php-fpm
+# Start supervisor (NGINX + PHP-FPM)
+CMD ["supervisord", "-c", "/etc/supervisor/conf.d/supervisord.conf"]
