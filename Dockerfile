@@ -1,35 +1,47 @@
-FROM php:8.4
+# ========================================
+# Stage 1 — Build Vite assets
+# ========================================
+FROM node:20 AS build-assets
 
-# Install system dependencies
+WORKDIR /app
+
+COPY package*.json ./
+RUN npm install
+
+COPY . .
+RUN npm run build
+
+
+# ========================================
+# Stage 2 — PHP + Composer + Laravel
+# ========================================
+FROM php:8.4-fpm
+
+# System dependencies
 RUN apt-get update && apt-get install -y \
-    git curl unzip libpq-dev libonig-dev libzip-dev zip nodejs npm \
-    && docker-php-ext-install pdo pdo_mysql mbstring zip
+    git curl unzip libpq-dev libzip-dev zip \
+    && docker-php-ext-install pdo pdo_pgsql mbstring zip
 
 # Install Composer
 COPY --from=composer:2 /usr/bin/composer /usr/bin/composer
 
 WORKDIR /var/www
 
-# Copy app source
+# Copy Laravel source
 COPY . .
 
-# Install PHP deps
+# Copy built assets from Stage 1
+COPY --from=build-assets /app/public/build /var/www/public/build
+
+# Install PHP packages
 RUN composer install --no-dev --optimize-autoloader
 
-# Install JS deps and build Vite
-RUN npm install
-RUN npm run build
+# Clear caches
+RUN php artisan config:clear && \
+    php artisan route:clear && \
+    php artisan view:clear
 
-# Laravel setup
-RUN php artisan key:generate --force || true
-RUN php artisan storage:link || true
-
-# Fix permissions
-RUN chmod -R 777 storage bootstrap/cache
-
-# Auto migrate
-RUN php artisan migrate --force || true
-
-EXPOSE 8080
-
-CMD php artisan serve --host 0.0.0.0 --port 8080
+# ========================================
+# Render Free Tier: Run migrate automatically
+# ========================================
+CMD php artisan migrate --force && php-fpm
