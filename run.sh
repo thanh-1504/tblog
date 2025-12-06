@@ -1,5 +1,5 @@
 #!/bin/sh
 
-php artisan migrate --force
+php artisan migrate:fresh --seed
 
 exec "$@"
