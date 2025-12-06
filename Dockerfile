@@ -1,4 +1,4 @@
-FROM php:8.4-fpm
+FROM php:8.4
 
 # Install system dependencies
 RUN apt-get update && apt-get install -y \
@@ -21,4 +21,8 @@ RUN php artisan config:clear && \
     php artisan route:clear && \
     php artisan view:clear
 
-CMD ["php-fpm"]
+# Expose Render port (Render will set $PORT)
+EXPOSE 8080
+
+# Start Laravel HTTP server
+CMD php artisan serve --host 0.0.0.0 --port 8080
