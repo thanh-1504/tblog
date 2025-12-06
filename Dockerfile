@@ -13,16 +13,23 @@ WORKDIR /var/www
 # Copy app files
 COPY . .
 
-# Install PHP dependencies
+# Copy .env.example nếu có
+RUN cp .env.example .env || true
+
+# Install Laravel dependencies
 RUN composer install --no-dev --optimize-autoloader
 
 # Laravel setup
-RUN php artisan config:clear && \
-    php artisan route:clear && \
-    php artisan view:clear
+RUN php artisan key:generate --force || true
+RUN php artisan storage:link || true
 
-# Expose Render port (Render will set $PORT)
+# Fix permissions (important)
+RUN chmod -R 777 storage bootstrap/cache
+
+# Run migrations on build (Cách 1)
+RUN php artisan migrate --force || true
+
 EXPOSE 8080
 
-# Start Laravel HTTP server
+# Start Laravel server
 CMD php artisan serve --host 0.0.0.0 --port 8080
