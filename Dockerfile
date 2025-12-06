@@ -71,4 +71,7 @@ RUN chown -R www-data:www-data /var/www/storage /var/www/bootstrap/cache /var/ww
 EXPOSE 80
 
 # Start supervisor (NGINX + PHP-FPM)
-CMD ["supervisord", "-c", "/etc/supervisor/conf.d/supervisord.conf"]
+COPY run.sh /run.sh
+RUN chmod +x /run.sh
+CMD ["/run.sh", "supervisord", "-c", "/etc/supervisor/conf.d/supervisord.conf"]
+
