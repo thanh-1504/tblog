@@ -1,77 +1,24 @@
-# ============================
-#  FRONTEND BUILD
-# ============================
-FROM node:18 AS frontend
-WORKDIR /app
+FROM php:8.2-fpm
 
-COPY package*.json ./
-RUN npm install
-
-COPY . .
-RUN npm run build
-
-
-# ============================
-#  BACKEND BUILD
-# ============================
-FROM php:8.4-fpm AS backend
-
-# Install build dependencies + PostgreSQL + SQLite + Composer
+# Install system dependencies
 RUN apt-get update && apt-get install -y \
     git curl unzip libpq-dev libonig-dev libzip-dev zip \
-    libsqlite3-dev sqlite3 nginx \
-    && docker-php-ext-configure zip \
-    && docker-php-ext-install pdo pdo_mysql mbstring zip pdo_sqlite pdo_pgsql
+    && docker-php-ext-install pdo pdo_mysql mbstring zip
 
+# Install Composer
 COPY --from=composer:2 /usr/bin/composer /usr/bin/composer
 
 WORKDIR /var/www
+
+# Copy app files
 COPY . .
 
-# Copy frontend build
-COPY --from=frontend /app/public/build ./public/build
-
-# Install PHP packages
+# Install PHP dependencies
 RUN composer install --no-dev --optimize-autoloader
 
-# Fix permissions
-RUN chown -R www-data:www-data /var/www/storage /var/www/bootstrap/cache \
-    && chmod -R 775 /var/www/storage /var/www/bootstrap/cache
+# Laravel setup
+RUN php artisan config:clear && \
+    php artisan route:clear && \
+    php artisan view:clear
 
-# Clear caches
-RUN php artisan config:clear && php artisan route:clear && php artisan view:clear
-
-
-# ============================
-#  FINAL RUNTIME IMAGE
-# ============================
-FROM php:8.4-fpm
-
-# Install nginx + supervisor + PostgreSQL driver
-RUN apt-get update && apt-get install -y \
-    nginx supervisor libpq-dev \
-    && docker-php-ext-install pdo pdo_pgsql \
-    && rm /etc/nginx/sites-enabled/default
-
-# Copy application
-COPY --from=backend /var/www /var/www
-
-# Copy Nginx config
-COPY nginx.conf /etc/nginx/conf.d/default.conf
-
-# Copy Supervisor config
-COPY supervisord.conf /etc/supervisor/conf.d/supervisord.conf
-
-WORKDIR /var/www
-
-# Fix log + cache permission (prevent 500 error)
-RUN chown -R www-data:www-data /var/www/storage /var/www/bootstrap/cache /var/www/public \
-    && chmod -R 775 /var/www/storage /var/www/bootstrap/cache
-
-EXPOSE 80
-
-# Start supervisor (NGINX + PHP-FPM)
-COPY run.sh /run.sh
-RUN chmod +x /run.sh
-CMD ["/run.sh", "supervisord", "-c", "/etc/supervisor/conf.d/supervisord.conf"]
-
+CMD ["php-fpm"]
